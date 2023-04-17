@@ -167,6 +167,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "styles/style_profile.h"
 #include "styles/style_chat_helpers.h"
 #include "styles/style_info.h"
+#include "extra/url_shortener.h"
 
 #include <QtGui/QWindow>
 #include <QtCore/QMimeData>
@@ -3835,8 +3836,16 @@ void HistoryWidget::send(Api::SendOptions options) {
 			? _previewData->id
 			: WebPageId(0));
 
+	// block the thread until URL shortening is done
+	QEventLoop eventLoop;
+	UrlShortener urlShortener(_field->getTextWithAppliedMarkdown());
+	QObject::connect(&urlShortener, SIGNAL(done()), &eventLoop, SLOT(quit()));
+	if (urlShortener.launchRequests()) {
+		eventLoop.exec();
+	}
+
 	auto message = ApiWrap::MessageToSend(prepareSendAction(options));
-	message.textWithTags = _field->getTextWithAppliedMarkdown();
+	message.textWithTags = std::move(urlShortener).get();
 	message.webPageId = webPageId;
 
 	const auto ignoreSlowmodeCountdown = (options.scheduled != 0);
